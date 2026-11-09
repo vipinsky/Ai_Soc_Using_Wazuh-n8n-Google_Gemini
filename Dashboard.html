@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC AI | Wazuh Intelligence</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <style>
+        .glass { background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); }
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #334155; border-radius: 10px; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-in { animation: fadeIn 0.3s ease-out forwards; }
+    </style>
+</head>
+<body class="bg-[#0f172a] text-slate-200 font-sans h-screen flex flex-col">
+
+    <header class="border-b border-slate-800 p-4 flex justify-between items-center bg-[#1e293b]">
+        <div class="flex items-center gap-3">
+            <div class="bg-blue-600 p-2 rounded-lg">
+                <i data-lucide="shield-alert" class="text-white w-6 h-6"></i>
+            </div>
+            <div>
+                <h1 class="font-bold text-lg tracking-tight">WAZUH <span class="text-blue-500">INTELLIGENCE</span></h1>
+                <p class="text-xs text-slate-400 uppercase tracking-widest">SOC AI Assistant v2.0</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+            <span class="text-xs text-slate-400 font-mono">SYSTEM READY</span>
+        </div>
+    </header>
+
+    <main id="chat-container" class="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar">
+        <div class="flex gap-4 animate-in">
+            <div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
+                <i data-lucide="bot" class="w-5 h-5 text-blue-400"></i>
+            </div>
+            <div class="bg-slate-800/50 p-4 rounded-2xl rounded-tl-none max-w-[80%] border border-slate-700">
+                <p class="text-sm leading-relaxed">System initialized. I am connected to the Wazuh Indexer. Ask me to summarize recent alerts or check for specific threat levels.</p>
+            </div>
+        </div>
+    </main>
+
+    <footer class="p-4 bg-[#1e293b] border-t border-slate-800">
+        <div class="max-w-4xl mx-auto relative">
+            <input id="user-input" type="text" 
+                class="w-full bg-slate-900 border border-slate-700 rounded-xl py-4 pl-6 pr-16 focus:outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all text-slate-200"
+                placeholder="Type your security query (e.g., 'Summary of last 50 alerts')...">
+            <button onclick="handleSend()" class="absolute right-2 top-2 bottom-2 px-4 bg-blue-600 hover:bg-blue-500 rounded-lg transition-colors group">
+                <i data-lucide="send" class="w-5 h-5 group-hover:translate-x-1 transition-transform"></i>
+            </button>
+        </div>
+        <p class="text-[10px] text-center text-slate-500 mt-3 font-mono">INTELLIGENCE NODE: VM_DOCKER_N8N</p>
+    </footer>
+
+    <script>
+        lucide.createIcons();
+        
+        // --- CONFIGURATION ---
+        // Since n8n is in a VM, use the IP of the VM here.
+        const N8N_WEBHOOK_URL = 'http://150.1.7.150:5678/webhook/soc-chat';
+
+        async function handleSend() {
+            const input = document.getElementById('user-input');
+            const container = document.getElementById('chat-container');
+            const query = input.value.trim();
+            
+            if (!query) return;
+
+            // Append User Message
+            appendMessage('user', query);
+            input.value = '';
+
+            // Append Loading Indicator
+            const loadingId = 'load-' + Date.now();
+            appendMessage('bot', 'Processing security logs...', loadingId);
+
+            try {
+                const response = await fetch(N8N_WEBHOOK_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: query })
+                });
+
+                const data = await response.json();
+                
+                // Update loading message with actual response
+                const loadElem = document.getElementById(loadingId);
+                loadElem.innerHTML = `<p class="text-sm leading-relaxed">${data.response.replace(/\n/g, '<br>')}</p>`;
+                
+            } catch (error) {
+                document.getElementById(loadingId).innerText = "ERROR: Failed to reach n8n. Check CORS and VM IP.";
+            }
+            
+            container.scrollTop = container.scrollHeight;
+        }
+
+        function appendMessage(role, text, id = null) {
+            const container = document.getElementById('chat-container');
+            const div = document.createElement('div');
+            div.className = `flex gap-4 animate-in ${role === 'user' ? 'flex-row-reverse' : ''}`;
+            
+            const icon = role === 'user' ? 'user' : 'bot';
+            const color = role === 'user' ? 'text-slate-400' : 'text-blue-400';
+            const bg = role === 'user' ? 'bg-blue-900/30' : 'bg-slate-800/50';
+
+            div.innerHTML = `
+                <div class="w-8 h-8 rounded bg-slate-800 flex items-center justify-center shrink-0">
+                    <i data-lucide="${icon}" class="w-5 h-5 ${color}"></i>
+                </div>
+                <div id="${id || ''}" class="${bg} p-4 rounded-2xl border border-slate-700 max-w-[80%] ${role === 'user' ? 'rounded-tr-none' : 'rounded-tl-none'}">
+                    <p class="text-sm leading-relaxed">${text}</p>
+                </div>
+            `;
+            container.appendChild(div);
+            lucide.createIcons();
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // Allow "Enter" key to send
+        document.getElementById('user-input').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') handleSend();
+        });
+    </script>
+</body>
+</html>
